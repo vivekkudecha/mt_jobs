@@ -1,38 +1,54 @@
+"""
+Dead Letter Queue (DLQ) Model
+
+Purpose:
+    Holds jobs that have permanently failed or exhausted all retry attempts for forensic analysis,
+    manual intervention, and safe replaying.
+
+Use Case:
+    When a job fails after 3 retries, rather than silently disappearing, it is recorded in `dead_letter_jobs`.
+    Operations engineers can inspect the error details and click Replay via the API.
+"""
+
 import uuid
 
 from django.db import models
 
 
 class DeadLetterReason(models.TextChoices):
-    RETRIES_EXHAUSTED = "RETRIES_EXHAUSTED", "Retries Exhausted"
-    PERMANENT_FAILURE = "PERMANENT_FAILURE", "Permanent Failure"
-    HANDLER_NOT_FOUND = "HANDLER_NOT_FOUND", "Handler Not Found"
-    INVALID_CONFIGURATION = (
-        "INVALID_CONFIGURATION",
-        "Invalid Configuration",
-    )
-    POISON_JOB = "POISON_JOB", "Poison Job"
+    """Why a job was routed to the dead-letter queue."""
+    RETRIES_EXHAUSTED = "RETRIES_EXHAUSTED", "Retries Exhausted"        # Maximum attempt count reached
+    PERMANENT_FAILURE = "PERMANENT_FAILURE", "Permanent Failure"        # PermanentJobError was raised
+    HANDLER_NOT_FOUND = "HANDLER_NOT_FOUND", "Handler Not Found"        # No registered code handler for job_type
+    INVALID_CONFIGURATION = "INVALID_CONFIGURATION", "Invalid Configuration"  # Missing tenant/job config
+    POISON_JOB = "POISON_JOB", "Poison Job"                            # Crashing worker repeatedly
 
 
 class DeadLetterStatus(models.TextChoices):
-    OPEN = "OPEN", "Open"
-    REPLAYED = "REPLAYED", "Replayed"
-    DISMISSED = "DISMISSED", "Dismissed"
+    """Current triage state of the dead-letter record."""
+    OPEN = "OPEN", "Open"              # Unresolved; awaiting developer/ops action
+    REPLAYED = "REPLAYED", "Replayed"  # Re-submitted as a new job
+    DISMISSED = "DISMISSED", "Dismissed"  # Closed without replaying (e.g. invalid request)
 
 
 class DeadLetterJob(models.Model):
+    """
+    Dead-letter record holding diagnostic context for failed jobs.
+    """
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
     )
 
+    # One-to-one link to the failed Job
     job = models.OneToOneField(
         "jobs.Job",
         on_delete=models.CASCADE,
         related_name="dead_letter",
     )
 
+    # Multi-tenant scoping
     tenant = models.ForeignKey(
         "tenants.Tenant",
         on_delete=models.PROTECT,
@@ -50,6 +66,7 @@ class DeadLetterJob(models.Model):
         default=DeadLetterStatus.OPEN,
     )
 
+    # Error diagnostics
     error_code = models.CharField(
         max_length=100,
         null=True,
@@ -69,8 +86,10 @@ class DeadLetterJob(models.Model):
     metadata = models.JSONField(
         default=dict,
         blank=True,
+        help_text="Diagnostic context captured at the moment of failure.",
     )
 
+    # Link to newly created Job when replayed
     replayed_job = models.ForeignKey(
         "jobs.Job",
         on_delete=models.SET_NULL,
@@ -79,6 +98,7 @@ class DeadLetterJob(models.Model):
         blank=True,
     )
 
+    # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
@@ -115,4 +135,4 @@ class DeadLetterJob(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"DLQ:{self.job_id}"
+        return f"DLQ:{self.job_id} ({self.status} - {self.reason})"
