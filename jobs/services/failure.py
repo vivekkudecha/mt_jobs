@@ -23,23 +23,29 @@ RETRYABLE = {
 }
 
 
+RETRY_DELAYS = {
+    1: 3,
+    2: 5,
+    3: 10,
+}
+
+
 @transaction.atomic
 def finalize_failure(job_id, failure_type, message):
     job = (
         Job.objects
         .select_for_update()
-        .select_related("retry_policy")
         .get(id=job_id)
     )
 
     now = timezone.now()
     can_retry = (
         failure_type in RETRYABLE
-        and job.attempt_count < job.retry_policy.max_attempts
+        and job.attempt_count in RETRY_DELAYS
     )
 
     if can_retry:
-        delay = _retry_delay(job)
+        delay = RETRY_DELAYS[job.attempt_count]
 
         job.status = JobStatus.RETRY_WAIT
         job.available_at = now + timedelta(seconds=delay)
@@ -67,17 +73,6 @@ def finalize_failure(job_id, failure_type, message):
     job.save()
 
     release_capacity(job)
-
-
-def _retry_delay(job):
-    policy = job.retry_policy
-
-    delay = float(policy.initial_delay_seconds) * (
-        float(policy.backoff_multiplier)
-        ** max(job.attempt_count - 1, 0)
-    )
-
-    return min(delay, policy.max_delay_seconds)
 
 
 @transaction.atomic

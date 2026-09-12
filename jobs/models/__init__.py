@@ -8,7 +8,7 @@ from .job import (
     Job,
     JobPriority,
     JobStatus,
-    WorkloadClass,
+    JobType,
 )
 from .outbox import (
     JobOutbox,
@@ -20,7 +20,6 @@ from .overlap import (
     OverlapScope,
 )
 from .reservation import JobExecutionReservation
-from .retry_policy import RetryPolicy
 from .scheduler_state import TenantSchedulerState
 
 
@@ -37,10 +36,9 @@ __all__ = (
     "JobOverlapLock",
     "JobPriority",
     "JobStatus",
+    "JobType",
     "OutboxEventType",
     "OutboxStatus",
     "OverlapScope",
-    "RetryPolicy",
     "TenantSchedulerState",
-    "WorkloadClass",
 )

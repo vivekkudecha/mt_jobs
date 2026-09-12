@@ -5,7 +5,7 @@ from celery import Celery
 
 # Celery runs outside Django's normal manage.py lifecycle,
 # so make sure Django settings are available when a worker starts.
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 
 # Single Celery application for the whole job-processing platform.

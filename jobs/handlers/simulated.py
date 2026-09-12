@@ -7,6 +7,7 @@ from jobs.domain.exceptions import (
 )
 from jobs.handlers.base import BaseJobHandler
 from jobs.handlers.registry import register
+from jobs.models.job import JobType
 
 
 def _sleep(payload, default=(2, 5)):
@@ -14,6 +15,7 @@ def _sleep(payload, default=(2, 5)):
     time.sleep(seconds or random.randint(*default))
 
 
+@register(JobType.REPORTS)
 @register("REPORT")
 class ReportHandler(BaseJobHandler):
     def execute(self, payload, context):
@@ -21,13 +23,14 @@ class ReportHandler(BaseJobHandler):
         return {"report_id": payload.get("report_id"), "status": "generated"}
 
 
-@register("DATA_PROCESSING")
+@register(JobType.DATA_PROCESSING)
 class DataProcessingHandler(BaseJobHandler):
     def execute(self, payload, context):
         _sleep(payload, (5, 12))
         return {"processed": True}
 
 
+@register(JobType.SYNCHRONIZATION)
 @register("SYNC")
 class SyncHandler(BaseJobHandler):
     def execute(self, payload, context):
@@ -35,6 +38,7 @@ class SyncHandler(BaseJobHandler):
         return {"synced": True}
 
 
+@register(JobType.AI_PROCESSING)
 @register("AI")
 class AIHandler(BaseJobHandler):
     def execute(self, payload, context):
@@ -42,7 +46,7 @@ class AIHandler(BaseJobHandler):
         return {"processed": True}
 
 
-@register("NOTIFICATION")
+@register(JobType.NOTIFICATION)
 class NotificationHandler(BaseJobHandler):
     def execute(self, payload, context):
         _sleep(payload, (1, 3))

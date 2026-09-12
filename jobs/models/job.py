@@ -25,11 +25,12 @@ class JobPriority(models.IntegerChoices):
     LOWEST = 5, "Lowest"
 
 
-class WorkloadClass(models.TextChoices):
-    LATENCY_SENSITIVE = "LATENCY_SENSITIVE", "Latency Sensitive"
-    IO_BOUND = "IO_BOUND", "IO Bound"
-    CPU_BOUND = "CPU_BOUND", "CPU Bound"
-    AI_HEAVY = "AI_HEAVY", "AI Heavy"
+class JobType(models.TextChoices):
+    REPORTS = "REPORTS", "Reports"
+    DATA_PROCESSING = "DATA_PROCESSING", "Data Processing"
+    SYNCHRONIZATION = "SYNCHRONIZATION", "Synchronization"
+    AI_PROCESSING = "AI_PROCESSING", "AI Processing"
+    NOTIFICATION = "NOTIFICATION", "Notification"
 
 
 class Job(models.Model):
@@ -45,20 +46,9 @@ class Job(models.Model):
         related_name="jobs",
     )
 
-    retry_policy = models.ForeignKey(
-        "jobs.RetryPolicy",
-        on_delete=models.PROTECT,
-        related_name="jobs",
-    )
-
     job_type = models.CharField(
-        max_length=100,
-    )
-
-    workload_class = models.CharField(
-        max_length=32,
-        choices=WorkloadClass.choices,
-        default=WorkloadClass.IO_BOUND,
+        max_length=50,
+        choices=JobType.choices,
     )
 
     status = models.CharField(
@@ -83,6 +73,7 @@ class Job(models.Model):
 
     idempotency_key = models.CharField(
         max_length=255,
+        default=uuid.uuid4,
         null=True,
         blank=True,
     )

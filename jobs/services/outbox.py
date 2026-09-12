@@ -2,7 +2,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from jobs.models import JobOutbox, OutboxStatus
-from jobs.tasks import execute_job
 
 
 def publish_pending(limit=100):
@@ -31,6 +30,8 @@ def publish_event(event_id):
         return
 
     try:
+        from jobs.tasks import execute_job
+
         execute_job.delay(str(event.job_id))
 
         event.status = OutboxStatus.PUBLISHED

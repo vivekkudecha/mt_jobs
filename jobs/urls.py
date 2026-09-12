@@ -8,8 +8,6 @@ from .views import (
     JobAttemptListView,
     DeadLetterListView,
     DeadLetterDetailView,
-    RetryPolicyListCreateView,
-    RetryPolicyDetailView,
 )
 
 
@@ -21,9 +19,5 @@ urlpatterns = [
 
     path("dead-letters/", DeadLetterListView.as_view()),
     path("dead-letters/<uuid:pk>/", DeadLetterDetailView.as_view()),
-    path("dead-letters/<uuid:pk>/replay/", DeadLetterReplayView.as_view(),
-),
-
-    path("retry-policies/", RetryPolicyListCreateView.as_view()),
-    path("retry-policies/<int:pk>/", RetryPolicyDetailView.as_view()),
+    path("dead-letters/<uuid:pk>/replay/", DeadLetterReplayView.as_view()),
 ]

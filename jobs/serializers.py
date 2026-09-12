@@ -7,7 +7,6 @@ from jobs.models import (
     JobExecutionReservation,
     JobOutbox,
     JobOverlapLock,
-    RetryPolicy,
     TenantSchedulerState,
 )
 
@@ -16,17 +15,26 @@ class JobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
         fields = "__all__"
+        read_only_fields = (
+            "ready_since",
+            "idempotency_key",
+        )
+        validators = []
+        extra_kwargs = {
+            "available_at": {"required": False},
+        }
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict) and "job_type" in data and isinstance(data["job_type"], str):
+            raw = data["job_type"].strip().upper().replace(" ", "_")
+            data = data.copy()
+            data["job_type"] = raw
+        return super().to_internal_value(data)
 
 
 class JobAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobAttempt
-        fields = "__all__"
-
-
-class RetryPolicySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RetryPolicy
         fields = "__all__"
 
 

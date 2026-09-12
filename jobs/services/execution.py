@@ -117,6 +117,13 @@ def complete_job(attempt_id, result):
     release_capacity(job)
 
 
+RETRY_DELAYS = {
+    1: 3,
+    2: 5,
+    3: 10,
+}
+
+
 @transaction.atomic
 def fail_job(attempt_id, exc, failure_type):
     now = timezone.now()
@@ -125,7 +132,6 @@ def fail_job(attempt_id, exc, failure_type):
     job = (
         Job.objects
         .select_for_update()
-        .select_related("retry_policy")
         .get(id=attempt.job_id)
     )
 
@@ -143,11 +149,11 @@ def fail_job(attempt_id, exc, failure_type):
             FailureType.TIMEOUT,
             FailureType.UNKNOWN,
         }
-        and job.attempt_count < job.retry_policy.max_attempts
+        and job.attempt_count in RETRY_DELAYS
     )
 
     if can_retry:
-        delay = retry_delay(job)
+        delay = RETRY_DELAYS[job.attempt_count]
 
         job.status = JobStatus.RETRY_WAIT
         job.available_at = now + timedelta(seconds=delay)
@@ -161,7 +167,6 @@ def fail_job(attempt_id, exc, failure_type):
             if failure_type == FailureType.PERMANENT
             else DeadLetterReason.RETRIES_EXHAUSTED
         )
-
 
         DeadLetterJob.objects.get_or_create(
             job=job,
@@ -180,14 +185,7 @@ def fail_job(attempt_id, exc, failure_type):
 
 
 def retry_delay(job):
-    policy = job.retry_policy
-
-    delay = float(policy.initial_delay_seconds) * (
-        float(policy.backoff_multiplier)
-        ** max(job.attempt_count - 1, 0)
-    )
-
-    return min(delay, policy.max_delay_seconds)
+    return RETRY_DELAYS.get(job.attempt_count, 10)
 
 
 def release_capacity(job):

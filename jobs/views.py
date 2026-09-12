@@ -2,12 +2,11 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework import status
 
-from jobs.models import Job, JobAttempt, DeadLetterJob, RetryPolicy
+from jobs.models import Job, JobAttempt, DeadLetterJob
 from jobs.serializers import (
     JobSerializer,
     JobAttemptSerializer,
     DeadLetterJobSerializer,
-    RetryPolicySerializer,
 )
 
 from jobs.services.submission import submit_job
@@ -25,7 +24,16 @@ class JobListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        job, created = submit_job(**serializer.validated_data)
+        job_data = serializer.validated_data.copy()
+        idempotency_key = (
+            request.headers.get("Idempotency-Key")
+            or request.headers.get("X-Idempotency-Key")
+            or request.data.get("idempotency_key")
+        )
+        if idempotency_key and "idempotency_key" not in job_data:
+            job_data["idempotency_key"] = idempotency_key
+
+        job, created = submit_job(**job_data)
 
         if created:
             refresh_scheduler_state(job.tenant_id)
@@ -81,13 +89,3 @@ class DeadLetterReplayView(generics.GenericAPIView):
 class DeadLetterDetailView(generics.RetrieveAPIView):
     queryset = DeadLetterJob.objects.all()
     serializer_class = DeadLetterJobSerializer
-
-
-class RetryPolicyListCreateView(generics.ListCreateAPIView):
-    queryset = RetryPolicy.objects.all()
-    serializer_class = RetryPolicySerializer
-
-
-class RetryPolicyDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = RetryPolicy.objects.all()
-    serializer_class = RetryPolicySerializer

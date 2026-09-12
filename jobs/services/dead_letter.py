@@ -18,9 +18,7 @@ def replay_dead_letter(dead_letter_id):
 
     new_job = Job.objects.create(
         tenant=source.tenant,
-        retry_policy=source.retry_policy,
         job_type=source.job_type,
-        workload_class=source.workload_class,
         priority=source.priority,
         payload=source.payload,
         available_at=timezone.now(),

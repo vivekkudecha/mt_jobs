@@ -1,3 +1,4 @@
+import uuid
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -8,35 +9,31 @@ from jobs.models import Job
 def submit_job(
     *,
     tenant,
-    retry_policy,
     job_type,
     payload,
     priority,
-    workload_class,
     idempotency_key=None,
     available_at=None,
     **kwargs
 ):
     available_at = available_at or timezone.now()
+    if not idempotency_key:
+        idempotency_key = str(uuid.uuid4())
 
-    if idempotency_key:
-        existing = Job.objects.filter(
-            tenant=tenant,
-            idempotency_key=idempotency_key,
-        ).first()
-
-        if existing:
-            return existing, False
+    existing = Job.objects.filter(
+        tenant=tenant,
+        idempotency_key=idempotency_key,
+    ).first()
+    if existing:
+        return existing, False
 
     try:
         with transaction.atomic():
             job = Job.objects.create(
                 tenant=tenant,
-                retry_policy=retry_policy,
                 job_type=job_type,
                 payload=payload,
                 priority=priority,
-                workload_class=workload_class,
                 idempotency_key=idempotency_key,
                 available_at=available_at,
                 ready_since=available_at

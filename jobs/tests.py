@@ -12,6 +12,7 @@ from django.utils import timezone
 from jobs.models import (
     AttemptStatus,
     DeadLetterJob,
+    DeadLetterReason,
     DeadLetterStatus,
     FailureType,
     Job,
@@ -20,9 +21,8 @@ from jobs.models import (
     JobOutbox,
     JobOverlapLock,
     JobStatus,
-    RetryPolicy,
+    JobType,
     TenantSchedulerState,
-    WorkloadClass,
 )
 from jobs.services.cancellation import cancel_job
 from jobs.services.dead_letter import replay_dead_letter
@@ -80,13 +80,7 @@ def tenant_b():
 
 @pytest.fixture
 def retry_policy():
-    return RetryPolicy.objects.create(
-        name="default",
-        max_attempts=3,
-        initial_delay_seconds=1,
-        backoff_multiplier=2,
-        max_delay_seconds=10,
-    )
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -96,10 +90,10 @@ def retry_policy():
 
 def create_job(
     tenant,
-    retry_policy,
+    retry_policy=None,
     *,
     priority=3,
-    job_type="REPORT",
+    job_type=JobType.REPORTS,
     status=JobStatus.WAITING,
     payload=None,
     idempotency_key=None,
@@ -110,9 +104,7 @@ def create_job(
 
     return Job.objects.create(
         tenant=tenant,
-        retry_policy=retry_policy,
         job_type=job_type,
-        workload_class=WorkloadClass.IO_BOUND,
         priority=priority,
         status=status,
         payload=payload or {},
@@ -122,14 +114,12 @@ def create_job(
     )
 
 
-def submit_data(tenant, retry_policy, key=None):
+def submit_data(tenant, retry_policy=None, key=None):
     return {
         "tenant": tenant,
-        "retry_policy": retry_policy,
-        "job_type": "REPORT",
+        "job_type": JobType.REPORTS,
         "payload": {},
         "priority": 3,
-        "workload_class": WorkloadClass.IO_BOUND,
         "idempotency_key": key,
     }
 
@@ -146,6 +136,8 @@ def test_job_submission(tenant, retry_policy):
 
     assert created is True
     assert job.status == JobStatus.WAITING
+    assert job.idempotency_key is not None
+    assert len(job.idempotency_key) > 0
 
 
 def test_duplicate_submission_returns_same_job(
@@ -573,6 +565,46 @@ def test_future_retry_not_promoted(
 # ---------------------------------------------------------------------
 
 
+def test_fixed_3_retry_delays_schedule(tenant):
+    job = create_job(tenant, status=JobStatus.EXECUTING)
+
+    # 1st failure -> 1st retry in 3 seconds
+    job.attempt_count = 1
+    job.save()
+    before_1 = timezone.now()
+    finalize_failure(job.id, FailureType.TRANSIENT, "fail-1")
+    job.refresh_from_db()
+    assert job.status == JobStatus.RETRY_WAIT
+    assert 2.5 <= (job.available_at - before_1).total_seconds() <= 3.5
+
+    # 2nd failure -> 2nd retry in 5 seconds
+    job.attempt_count = 2
+    job.save()
+    before_2 = timezone.now()
+    finalize_failure(job.id, FailureType.TRANSIENT, "fail-2")
+    job.refresh_from_db()
+    assert job.status == JobStatus.RETRY_WAIT
+    assert 4.5 <= (job.available_at - before_2).total_seconds() <= 5.5
+
+    # 3rd failure -> 3rd retry in 10 seconds
+    job.attempt_count = 3
+    job.save()
+    before_3 = timezone.now()
+    finalize_failure(job.id, FailureType.TRANSIENT, "fail-3")
+    job.refresh_from_db()
+    assert job.status == JobStatus.RETRY_WAIT
+    assert 9.5 <= (job.available_at - before_3).total_seconds() <= 10.5
+
+    # 4th failure -> 3 retries exhausted, send to DLQ
+    job.attempt_count = 4
+    job.save()
+    finalize_failure(job.id, FailureType.TRANSIENT, "fail-4")
+    job.refresh_from_db()
+    assert job.status == JobStatus.FAILED_FINAL
+    dlq = DeadLetterJob.objects.get(job=job)
+    assert dlq.reason == DeadLetterReason.RETRIES_EXHAUSTED
+
+
 def test_retry_exhaustion_goes_to_dlq(
     tenant,
     retry_policy,
@@ -583,7 +615,7 @@ def test_retry_exhaustion_goes_to_dlq(
         status=JobStatus.EXECUTING,
     )
 
-    job.attempt_count = retry_policy.max_attempts
+    job.attempt_count = 4
     job.save()
 
     finalize_failure(
@@ -1078,15 +1110,9 @@ def test_concurrent_dispatch_never_exceeds_tenant_limit():
         tenant=tenant,
     )
 
-    policy = RetryPolicy.objects.create(
-        name="concurrent-policy",
-        max_attempts=3,
-    )
-
     for _ in range(10):
         create_job(
             tenant,
-            policy,
         )
 
     results = []
@@ -1148,14 +1174,8 @@ def test_concurrent_claim_creates_only_one_attempt():
         tenant=tenant,
     )
 
-    policy = RetryPolicy.objects.create(
-        name="claim-policy",
-        max_attempts=3,
-    )
-
     job = create_job(
         tenant,
-        policy,
     )
 
     dispatch_next(tenant.id)
@@ -1220,10 +1240,6 @@ def test_concurrent_duplicate_submission_creates_one_job():
         tenant=tenant,
     )
 
-    policy = RetryPolicy.objects.create(
-        name="idempotency-policy",
-    )
-
     key = str(uuid.uuid4())
 
     job_ids = []
@@ -1236,8 +1252,7 @@ def test_concurrent_duplicate_submission_creates_one_job():
             job, _ = submit_job(
                 **submit_data(
                     tenant,
-                    policy,
-                    key,
+                    key=key,
                 )
             )
 
@@ -1281,14 +1296,9 @@ def test_concurrent_overlap_allows_one_resource_owner():
         tenant=tenant,
     )
 
-    policy = RetryPolicy.objects.create(
-        name="overlap-policy",
-    )
-
     for _ in range(5):
         create_job(
             tenant,
-            policy,
             payload={
                 "overlap_key": "shared-resource",
             },
@@ -1334,10 +1344,6 @@ def test_concurrent_overlap_allows_one_resource_owner():
 
 @pytest.mark.django_db(transaction=True)
 def test_different_tenants_dispatch_concurrently():
-    policy = RetryPolicy.objects.create(
-        name="multi-tenant-race",
-    )
-
     tenants = []
 
     for number in range(3):
@@ -1352,7 +1358,6 @@ def test_different_tenants_dispatch_concurrently():
 
         create_job(
             tenant,
-            policy,
         )
 
         tenants.append(tenant)
