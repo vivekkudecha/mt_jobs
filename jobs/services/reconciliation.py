@@ -102,6 +102,8 @@ def recover_queued(job_id):
         job_id (UUID): ID of the stuck Job.
     """
     from jobs.models import Job
+    from jobs.services.execution import release_capacity
+    from jobs.services.scheduler_state import refresh_scheduler_state
 
     job = Job.objects.select_for_update().get(id=job_id)
 
@@ -119,5 +121,6 @@ def recover_queued(job_id):
         ]
     )
 
-    # Remove stale reservation slot
-    JobExecutionReservation.objects.filter(job=job).delete()
+    # Release reservation slot and decrement active reservations
+    release_capacity(job)
+    refresh_scheduler_state(job.tenant_id)

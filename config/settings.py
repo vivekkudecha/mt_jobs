@@ -125,4 +125,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "jobs.tasks.publish_outbox",
         "schedule": 1.0,
     },
+    "reconcile-zombies": {
+        "task": "jobs.tasks.reconcile_zombies",
+        "schedule": 10.0,
+    }
 }

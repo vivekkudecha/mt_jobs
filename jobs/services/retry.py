@@ -13,6 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from jobs.models import Job, JobStatus
+from jobs.services.scheduler_state import refresh_scheduler_state
 
 
 @transaction.atomic
@@ -40,6 +41,7 @@ def promote_ready_retries(limit=100):
     )
 
     count = 0
+    tenant_ids = set()
 
     # Promote each job to WAITING and reset ready_since timestamp for fair FIFO dispatch
     for job in jobs:
@@ -52,6 +54,10 @@ def promote_ready_retries(limit=100):
                 "updated_at",
             ]
         )
+        tenant_ids.add(job.tenant_id)
         count += 1
+
+    for tenant_id in tenant_ids:
+        refresh_scheduler_state(tenant_id)
 
     return count

@@ -19,6 +19,7 @@ from jobs.services.dispatcher import dispatch_next
 from jobs.services.execution import execute
 from jobs.services.outbox import publish_pending
 from jobs.services.retry import promote_ready_retries
+from jobs.services.reconciliation import reconcile_expired
 
 
 @shared_task(
@@ -65,3 +66,9 @@ def dispatch_jobs():
 
     for tenant_id in tenant_ids:
         dispatch_next(tenant_id)
+
+
+@shared_task
+def reconcile_zombies():
+    """Periodic task that recovers abandoned worker leases and orphaned reservations."""
+    reconcile_expired()

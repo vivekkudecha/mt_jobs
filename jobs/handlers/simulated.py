@@ -38,7 +38,13 @@ def _sleep(payload, default=(2, 5), context=None):
 
     # Simulate realistic execution duration
     seconds = payload.get("duration")
-    time.sleep(seconds or random.randint(*default))
+    if seconds is not None:
+        # If duration is provided in milliseconds (e.g. 5000 ms), convert to seconds (5.0s)
+        if seconds > 30:
+            seconds = seconds / 1000.0
+        time.sleep(seconds)
+    else:
+        time.sleep(random.randint(*default))
 
 
 @register(JobType.REPORTS)
