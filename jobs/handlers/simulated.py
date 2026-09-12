@@ -10,7 +10,14 @@ from jobs.handlers.registry import register
 from jobs.models.job import JobType
 
 
-def _sleep(payload, default=(2, 5)):
+def _sleep(payload, default=(2, 5), context=None):
+    if payload.get("simulate_permanent_failure"):
+        raise PermanentJobError("Simulated permanent failure")
+    if payload.get("simulate_temporary_failure"):
+        fail_until = payload.get("fail_until_attempt", 1)
+        if context and context.attempt and context.attempt.attempt_number <= fail_until:
+            raise RetryableJobError("Simulated temporary failure")
+
     seconds = payload.get("duration")
     time.sleep(seconds or random.randint(*default))
 
@@ -19,14 +26,14 @@ def _sleep(payload, default=(2, 5)):
 @register("REPORT")
 class ReportHandler(BaseJobHandler):
     def execute(self, payload, context):
-        _sleep(payload, (3, 8))
+        _sleep(payload, (3, 8), context=context)
         return {"report_id": payload.get("report_id"), "status": "generated"}
 
 
 @register(JobType.DATA_PROCESSING)
 class DataProcessingHandler(BaseJobHandler):
     def execute(self, payload, context):
-        _sleep(payload, (5, 12))
+        _sleep(payload, (5, 12), context=context)
         return {"processed": True}
 
 
@@ -34,7 +41,7 @@ class DataProcessingHandler(BaseJobHandler):
 @register("SYNC")
 class SyncHandler(BaseJobHandler):
     def execute(self, payload, context):
-        _sleep(payload, (4, 10))
+        _sleep(payload, (4, 10), context=context)
         return {"synced": True}
 
 
@@ -42,14 +49,14 @@ class SyncHandler(BaseJobHandler):
 @register("AI")
 class AIHandler(BaseJobHandler):
     def execute(self, payload, context):
-        _sleep(payload, (8, 15))
+        _sleep(payload, (8, 15), context=context)
         return {"processed": True}
 
 
 @register(JobType.NOTIFICATION)
 class NotificationHandler(BaseJobHandler):
     def execute(self, payload, context):
-        _sleep(payload, (1, 3))
+        _sleep(payload, (1, 3), context=context)
         return {"sent": True}
 
 

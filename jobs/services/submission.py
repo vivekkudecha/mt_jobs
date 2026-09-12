@@ -2,7 +2,7 @@ import uuid
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from jobs.models import Job
+from jobs.models import Job, JobPriority
 
 
 @transaction.atomic
@@ -10,12 +10,13 @@ def submit_job(
     *,
     tenant,
     job_type,
-    payload,
-    priority,
+    payload=None,
+    priority=JobPriority.NORMAL,
     idempotency_key=None,
     available_at=None,
     **kwargs
 ):
+    payload = payload if payload is not None else {}
     available_at = available_at or timezone.now()
     if not idempotency_key:
         idempotency_key = str(uuid.uuid4())

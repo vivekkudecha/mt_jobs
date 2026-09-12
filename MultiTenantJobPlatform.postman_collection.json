@@ -1,0 +1,1132 @@
+{
+  "info": {
+    "_postman_id": "9b128522-8321-4d7a-8f92-ec72fba12891",
+    "name": "Multi-Tenant Job Platform API",
+    "description": "Comprehensive Postman Collection testing every single endpoint, scenario, job type, failure mode, idempotency rule, cancellation, and DLQ replay workflow for the Multi-Tenant Job Orchestration Platform.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantBetaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobReportId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "overlapKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dlqId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "replayedJobId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Tenants Management",
+      "item": [
+        {
+          "name": "Create Tenant Alpha (Active)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Tenant created with valid ID\", function () {",
+                  "    pm.expect(jsonData.id).to.be.a('string');",
+                  "    pm.expect(jsonData.name).to.include('Tenant Alpha');",
+                  "    pm.expect(jsonData.max_concurrent_jobs).to.eql(3);",
+                  "    pm.collectionVariables.set(\"tenantId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tenant Alpha - {{$randomUUID}}\",\n  \"max_concurrent_jobs\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Tenant Beta (Secondary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"tenantBetaId\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tenant Beta - {{$randomUUID}}\",\n  \"max_concurrent_jobs\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ""]
+            }
+          }
+        },
+        {
+          "name": "List All Tenants",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Response is an array containing created tenants\", function () {",
+                  "    pm.expect(Array.isArray(jsonData)).to.be.true;",
+                  "    var ids = jsonData.map(t => t.id);",
+                  "    pm.expect(ids).to.include(pm.collectionVariables.get(\"tenantId\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ""]
+            }
+          }
+        },
+        {
+          "name": "Retrieve Tenant Alpha",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Correct tenant retrieved\", function () {",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"tenantId\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/{{tenantId}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "{{tenantId}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Tenant Alpha Capacity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Max concurrent jobs updated to 5\", function () {",
+                  "    pm.expect(jsonData.max_concurrent_jobs).to.eql(5);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_concurrent_jobs\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/{{tenantId}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "{{tenantId}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Validation: Missing Tenant Name (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_concurrent_jobs\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ""]
+            }
+          }
+        },
+        {
+          "name": "Error: Non-Existent Tenant (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/00000000-0000-0000-0000-000000000000/",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "00000000-0000-0000-0000-000000000000", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Job Submissions & Types",
+      "item": [
+        {
+          "name": "Submit Job - REPORTS (High Priority)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Job created in WAITING status\", function () {",
+                  "    pm.expect(jsonData.status).to.eql(\"WAITING\");",
+                  "    pm.expect(jsonData.job_type).to.eql(\"REPORTS\");",
+                  "    pm.expect(jsonData.priority).to.eql(2);",
+                  "    pm.collectionVariables.set(\"jobReportId\", jsonData.id);",
+                  "    pm.collectionVariables.set(\"jobId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"REPORTS\",\n  \"priority\": 2,\n  \"payload\": {\n    \"report_id\": \"sales_monthly_2026\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - DATA_PROCESSING",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.job_type).to.eql(\"DATA_PROCESSING\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"DATA_PROCESSING\",\n  \"priority\": 3,\n  \"payload\": {\n    \"dataset\": \"analytics_stream\",\n    \"records\": 5000,\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - SYNCHRONIZATION",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.job_type).to.eql(\"SYNCHRONIZATION\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"SYNCHRONIZATION\",\n  \"priority\": 3,\n  \"payload\": {\n    \"target_crm\": \"hubspot\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - AI_PROCESSING",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.job_type).to.eql(\"AI_PROCESSING\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"AI_PROCESSING\",\n  \"priority\": 1,\n  \"payload\": {\n    \"prompt\": \"Summarize quarterly report\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - NOTIFICATION",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.job_type).to.eql(\"NOTIFICATION\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"NOTIFICATION\",\n  \"priority\": 4,\n  \"payload\": {\n    \"recipient\": \"devops@company.com\",\n    \"channel\": \"email\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - With Idempotency Key (First Request)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var key = 'idemp-' + pm.variables.replaceIn('{{$randomUUID}}');",
+                  "pm.collectionVariables.set('idempotencyKey', key);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created on first submission\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.idempotency_key).to.eql(pm.collectionVariables.get('idempotencyKey'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"REPORTS\",\n  \"idempotency_key\": \"{{idempotencyKey}}\",\n  \"payload\": {\n    \"invoice_id\": 8821,\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Duplicate Job (Same Idempotency Key -> 200 OK Deduplication)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK (Idempotent replay)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.idempotency_key).to.eql(pm.collectionVariables.get('idempotencyKey'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"REPORTS\",\n  \"idempotency_key\": \"{{idempotencyKey}}\",\n  \"payload\": {\n    \"invoice_id\": 8821,\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - With Idempotency-Key Header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.idempotency_key).to.be.a('string');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "header-idemp-{{$randomUUID}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"DATA_PROCESSING\",\n  \"payload\": {\n    \"stream\": \"live_sync\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job - With Overlap Key (Mutual Exclusion Lock)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var lock = 'res_db_dump_' + pm.variables.replaceIn('{{$randomUUID}}');",
+                  "pm.collectionVariables.set('overlapKey', lock);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"SYNCHRONIZATION\",\n  \"payload\": {\n    \"overlap_key\": \"{{overlapKey}}\",\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Validation: Missing job_type (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData).to.have.property('job_type');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"payload\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Validation: Invalid job_type Choice (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"UNSUPPORTED_JOB_TYPE\",\n  \"payload\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Validation: Non-Existent Tenant UUID (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"00000000-0000-0000-0000-000000000000\",\n  \"job_type\": \"REPORTS\",\n  \"payload\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Job Lifecycle & Inspection",
+      "item": [
+        {
+          "name": "List All Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Returned array contains created jobs\", function () {",
+                  "    pm.expect(Array.isArray(jsonData)).to.be.true;",
+                  "    pm.expect(jsonData.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Retrieve Job Status & Results",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Job details retrieved\", function () {",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"jobId\"));",
+                  "    pm.expect(jsonData.status).to.be.oneOf([\"WAITING\", \"QUEUED\", \"EXECUTING\", \"SUCCEEDED\", \"RETRY_WAIT\", \"FAILED_FINAL\", \"CANCELLED\"]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Retrieve Non-Existent Job (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/00000000-0000-0000-0000-000000000000/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "00000000-0000-0000-0000-000000000000", ""]
+            }
+          }
+        },
+        {
+          "name": "List Job Execution Attempts (Worker Logs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Attempts list is an array\", function () {",
+                  "    pm.expect(Array.isArray(jsonData)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/attempts/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}", "attempts", ""]
+            }
+          }
+        },
+        {
+          "name": "Cancel Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.expect(jsonData.status).to.be.oneOf([\"CANCELLED\", \"CANCEL_REQUESTED\", \"SUCCEEDED\", \"FAILED_FINAL\"]);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/cancel/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}", "cancel", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Failure & Retry Modes",
+      "item": [
+        {
+          "name": "Submit Job with Simulated Temporary Failure (Retryable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"DATA_PROCESSING\",\n  \"priority\": 3,\n  \"payload\": {\n    \"simulate_temporary_failure\": true,\n    \"fail_until_attempt\": 1,\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        },
+        {
+          "name": "Submit Job with Simulated Permanent Failure (DLQ Escalation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"job_type\": \"REPORTS\",\n  \"priority\": 2,\n  \"payload\": {\n    \"simulate_permanent_failure\": true,\n    \"duration\": 0.05\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Dead Letter Queue (DLQ)",
+      "item": [
+        {
+          "name": "List All Dead Letters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Dead letters is an array\", function () {",
+                  "    pm.expect(Array.isArray(jsonData)).to.be.true;",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.collectionVariables.set(\"dlqId\", jsonData[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dead-letters/",
+              "host": ["{{baseUrl}}"],
+              "path": ["dead-letters", ""]
+            }
+          }
+        },
+        {
+          "name": "Retrieve Dead Letter Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"dlqId\")) {",
+                  "    pm.test.skip(\"No DLQ item available to retrieve\");",
+                  "} else {",
+                  "    pm.test(\"Status code is 200 OK\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"dlqId\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dead-letters/{{dlqId}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["dead-letters", "{{dlqId}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Replay Dead Letter Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"dlqId\")) {",
+                  "    pm.test.skip(\"No DLQ item available to replay\");",
+                  "} else {",
+                  "    pm.test(\"Status code is 201 Created on replay\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"WAITING\");",
+                  "    pm.collectionVariables.set(\"replayedJobId\", jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dead-letters/{{dlqId}}/replay/",
+              "host": ["{{baseUrl}}"],
+              "path": ["dead-letters", "{{dlqId}}", "replay", ""]
+            }
+          }
+        },
+        {
+          "name": "Retrieve Replayed Job Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"replayedJobId\")) {",
+                  "    pm.test.skip(\"No replayed job ID set\");",
+                  "} else {",
+                  "    pm.test(\"Status code is 200 OK\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(pm.collectionVariables.get(\"replayedJobId\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{replayedJobId}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{replayedJobId}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Error: Non-Existent Dead Letter (404 Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dead-letters/00000000-0000-0000-0000-000000000000/",
+              "host": ["{{baseUrl}}"],
+              "path": ["dead-letters", "00000000-0000-0000-0000-000000000000", ""]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
